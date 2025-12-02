@@ -83,16 +83,31 @@ mask = df['description'].str.contains('\bkill|\bviolence', case=False)
 print(df.loc[mask, 'show_id'].to_string())
 #endregion
 
-#region "Which country has the highest production output of Movies?"
+#region Which country has the highest production output of Movies?
 mask = df['type'] == 'Movie'
 mov_out = df.loc[mask, 'country'].value_counts(dropna=True)
 print(mov_out)
-#endregion
+#end
 
-#region "What is the average number of seasons for TV Shows?"
+#region What is the average number of seasons for TV Shows?
 mask_avg_seasons = df['type'] == 'TV Show'
 avg_seasons = (df.loc[mask_avg_seasons, 'duration'].str.extract(r'^(\d+)', expand=False)
                .astype(float)
                .mean())
 print(f'Average number of seasons for TV Shows: {avg_seasons:.2f}')
+#endregion
+
+#region Which year had the highest number of content releases?
+print(f'Most content was released in year {df['release_year'].mode()[0]}.')
+#endregion
+
+#region Compare the number of Movies vs. TV Shows added to Netflix per year.
+df['years_released'] = df['date_added'].str.extract(r'(\d{4})$', expand=False)
+yearly_count_by_type = (df
+                        .groupby(['years_released','type'])
+                        .size()
+                        .unstack(fill_value=0)
+                        .sort_index())
+
+print(yearly_count_by_type)
 #endregion
