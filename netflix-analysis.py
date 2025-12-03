@@ -26,10 +26,6 @@ print(g)
 #endregion
 
 #region What is the most common content rating on Netflix?
-g = (df.groupby(['rating'])
-        .size())
-# print(g)
-
 # There are some dirty ratings such as 'x min' as well as blanks.
 # Better to filter known strings only.
 valid_ratings = ['G', 'PG', 'PG-13', 'R', 'NC-17', 'NR', 'UR',
@@ -89,7 +85,7 @@ print(df.loc[mask, 'show_id'].to_string())
 mask = df['type'] == 'Movie'
 mov_out = df.loc[mask, 'country'].value_counts(dropna=True)
 print(mov_out)
-#end
+#endregion
 
 #region What is the average number of seasons for TV Shows?
 mask_avg_seasons = df['type'] == 'TV Show'
@@ -120,7 +116,6 @@ print(monthly_vc.index[0])
 #endregion
 
 #region What is the average delay between the release_year and the date_added to Netflix?
-
 # 1. Dirty practice
 df['added_year'] = df['date_added'].str.extract(r'(\d{4})$', expand=False).fillna(-1)
 cols_to_convert = ['added_year', 'release_year']
@@ -135,4 +130,96 @@ print(avg_delay_in_years.mean())
 df['date_added_dt'] = pd.to_datetime(df['date_added'].str.strip(), errors='coerce') # This is NaN safe, NaN mapped to NaT
 df['avg_delay_release'] = (df['date_added_dt'] - pd.to_datetime(df['release_year'])).dt.days
 print(f'Average delay in days: {df['avg_delay_release'].mean()}')
+#endregion
+
+#region Find all movies that are 'Documentaries' AND were produced in the 'United Kingdom'.
+docu_uk_mask = ((df['type'] == 'Movie') &
+                (df['listed_in'].str.contains('Documentaries', na=False)) &
+                (df['country'].str.contains('United Kingdom', na=False)))
+print(f'Movies that are \'Documentaries\' AND were produced in the UK: '
+      f'{df.loc[docu_uk_mask, ['show_id', 'title']]}')
+#endregion
+
+#region Identify the longest Movie and the TV Show with the most Seasons.
+# 1. Movie
+mask_mov = df['type'] == 'Movie'
+movies_dur = (df.loc[mask_mov, 'duration'].str.extract(r'^(\d+)', expand=False)
+                    .dropna()
+                    .astype(int)
+                    .sort_values(ascending=False))
+print(f'The longest movie: {df.loc[movies_dur.index[0]]}')
+
+# 2. TV Show
+mask_tv_series = df['type'] == 'TV Show'
+tv_series_dur = (df.loc[mask_tv_series, 'duration'].str.extract(r'^(\d+)', expand=False)
+                    .dropna()
+                    .astype(int)
+                    .sort_values(ascending=False))
+print(f'The longest running tv series: {df.loc[tv_series_dur.index[0]]}')
+#endregion
+
+# ===========================================
+#               VISUALIZATION
+# ===========================================
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+#region Plot the growth of Netflix's content library over time (by date_added)
+# 1. via Matplotlib
+df['year_month_added'] = pd.to_datetime(df['date_added'].str.strip(), errors='coerce')
+(df.groupby(pd.Grouper(key='year_month_added', freq='ME'))
+ .size()
+ .plot())
+
+plt.title('Average content count')
+plt.xlabel = 'Date added'
+plt.ylabel = 'Count'
+plt.show()
+
+# 2. via Seaborn
+df['year_month_added'] = pd.to_datetime(df['date_added'].str.strip(), errors='coerce')
+sns_data = df.groupby(pd.Grouper(key='year_month_added', freq='ME')).size().reset_index(name='count')
+ax = sns.barplot(data=sns_data, x='year_month_added', y='count')
+# Nice-to-have: Fixing the baseline
+# Show every 10th label
+for i, label in enumerate(ax.get_xticklabels()):
+    if i % 10 != 0:
+        label.set_visible(False)
+plt.xticks(rotation=45, ha='right')
+plt.show()
+#endregion
+
+#region Show the distribution of Movie durations (in minutes)
+mov_mask = df['type'] == 'Movie'
+movies_dur = df.loc[mov_mask, 'duration'].str.extract(r'^(\d+)', expand=False).fillna(0).astype(int)
+movies_dur.hist(bins=30, legend=True)
+
+plt.xlabel('Duration (minutes)')
+plt.ylabel('Count')
+plt.show()
+#endregion
+
+#region Create a Heatmap showing the density of content releases by Month and Country (for the top 10 countries)
+df['country_split'] = df['country'].str.split(',') # country: 'United States, India, France' -> country_split: ['United States','India','France']
+df_exploded = df.explode('country_split') # creating a separate row for each item in the 'country'
+df_exploded['country_split'] = df_exploded['country_split'].str.strip()
+
+top10_countries = df_exploded['country_split'].value_counts().head(10).keys()
+top10countries_mask = df_exploded['country_split'].isin(top10_countries)
+df_exploded['month_added'] = df_exploded['date_added'].str.extract(r'^([a-zA-Z]+)', expand=False).fillna('N/A')
+
+country_month = (df_exploded.loc[top10countries_mask]
+                 .groupby(['country_split', 'month_added'])
+                 .size()
+                 .unstack(fill_value=0))
+# print(country_month.head(10))
+
+# Beautify the output months - chronologically sorted
+month_order = ['January', 'February', 'March', 'April', 'May', 'June',
+               'July', 'August', 'September', 'October', 'November', 'December']
+country_month = country_month.reindex(columns=month_order, fill_value=0)
+
+plt.figure(figsize=(16, 12))
+sns.heatmap(country_month.astype(int), fmt='g', annot=True, cmap='YlGnBu')
+plt.show()
 #endregion
